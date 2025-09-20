@@ -6,8 +6,10 @@ import com.example.demo.dto.auth.LoginRequest;
 import com.example.demo.dto.auth.RegisterRequest;
 import com.example.demo.dto.user.UserResponse;
 import com.example.demo.exception.EmailAlreadyExistsException;
+import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.exception.UsernameAlreadyExistsException;
 import com.example.demo.mapper.UserMapper;
+import com.example.demo.model.RefreshToken;
 import com.example.demo.model.User;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.security.JWTUtils;
@@ -80,6 +82,7 @@ public class AuthServiceImpl implements AuthService {
         return new JwtAuthenticationResponse(accessToken, refreshToken, userResponse);
     }
 
+    @Override
     public JwtAuthenticationResponse login(@Valid @RequestBody LoginRequest loginRequest) {
         log.info("User login: {}", loginRequest.getUsername());
 
@@ -95,5 +98,21 @@ public class AuthServiceImpl implements AuthService {
         UserResponse userResponse = userMapper.toUserResponse(user);
 
         return new JwtAuthenticationResponse(accessToken, refreshToken, userResponse);
+    }
+
+    @Override
+    public JwtAuthenticationResponse refreshToken(String refreshTokenString) {
+        log.info("Refresh Token request");
+
+        RefreshToken refreshToken = refreshTokenService.findByToken(refreshTokenString)
+                .orElseThrow(() -> new ResourceNotFoundException("Refresh Token not found!"));
+
+        refreshToken = refreshTokenService.isRefreshTokenValid(refreshToken);
+
+        String accessToken = jwtUtils.generateJwtTokenFromUsername(refreshToken.getUser().getUsername());
+        String responseRefreshToken = refreshTokenService.rotateToken(refreshToken).getToken();
+        UserResponse userResponse = userMapper.toUserResponse(refreshToken.getUser());
+
+        return new JwtAuthenticationResponse(accessToken, responseRefreshToken, userResponse);
     }
 }

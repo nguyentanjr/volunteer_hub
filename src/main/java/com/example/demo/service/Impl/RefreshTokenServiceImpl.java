@@ -1,5 +1,6 @@
 package com.example.demo.service.Impl;
 
+import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.model.RefreshToken;
 import com.example.demo.model.User;
 import com.example.demo.repository.RefreshTokenRepository;
@@ -10,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -35,6 +37,11 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     }
 
     @Override
+    public Optional<RefreshToken> findByToken(String refreshToken) {
+        return refreshTokenRepository.findByToken(refreshToken);
+    }
+
+    @Override
     public int deleteByUser(User user) {
         log.info("Delete refresh token from user: {}", user.getUsername());
         return refreshTokenRepository.deleteByUser(user);
@@ -48,8 +55,41 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
         refreshToken.markAsUsed();
     }
 
-    public boolean isRefreshTokenValid(RefreshToken refreshToken) {
-        return refreshTokenRepository.isRefreshTokenValid(refreshToken.getToken());
+
+
+    @Override
+    public RefreshToken isRefreshTokenValid(RefreshToken refreshToken) {
+        if(refreshToken.isExpired()) {
+            log.warn("Refresh token is expired for user: {}", refreshToken.getUser().getUsername());
+            throw new ResourceNotFoundException("Refresh Token is expired");
+        }
+
+        if(refreshToken.isRevoked()) {
+            log.warn("Refresh token is revoked for user: {}", refreshToken.getUser().getUsername());
+            throw new ResourceNotFoundException("Refresh Token is revoked");
+        }
+
+        return refreshToken;
     }
 
+    @Override
+    public RefreshToken rotateToken(RefreshToken currentToken) {
+        log.info("Rotating token for user: {}", currentToken.getUser().getUsername());
+
+        currentToken.markAsUsed();
+        currentToken.revoke();
+        refreshTokenRepository.save(currentToken);
+
+        RefreshToken newRefreshToken = new RefreshToken()
+                .setToken(UUID.randomUUID().toString())
+                .setExpiryDate(Instant.now().plusMillis(jwtUtils.getJwtTokenExpirationMs()))
+                .setUser(currentToken.getUser());
+        RefreshToken savedRefreshToken = refreshTokenRepository.save(newRefreshToken);
+
+        log.info("Created new refresh token rotation for user: {}", currentToken.getUser().getUsername());
+
+        return savedRefreshToken;
+
+
+    }
 }
