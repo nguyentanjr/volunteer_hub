@@ -49,7 +49,7 @@ public class PostServiceImpl implements PostService {
             throw new IllegalArgumentException("Event ID cannot be null");
         }
         return postRepository.getAllPostByEvent(eventId, pageable)
-                .map(postMapper::toPostDTO);
+                .map(this::toDTOWithLikeCountAndCommentCount);
     }
 
     @Transactional
@@ -118,6 +118,20 @@ public class PostServiceImpl implements PostService {
         PostDTO postDTO = postMapper.toPostDTO(post);
         postDTO.setCommentCount(commentRepository.countCommentsByPostId(postDTO.getId()));
         postDTO.setLikeCount(likeRepository.countLikesByPostId(postDTO.getId()));
+
+        try {
+            User currentUser = userService.getCurrentUser();
+            if (currentUser != null) {
+                boolean liked = likeRepository.findByPostIdAndUserId(post.getId(), currentUser.getId()) != null;
+                postDTO.setIsLikedByCurrentUser(liked);
+            } else {
+                postDTO.setIsLikedByCurrentUser(false);
+            }
+        } catch (Exception e) {
+            // Nếu không có user đăng nhập, mặc định chưa like
+            postDTO.setIsLikedByCurrentUser(false);
+        }
+
         return postDTO;
     }
 }

@@ -16,5 +16,6 @@ public interface CommentMapper {
     @Mapping(target = "parentCommentId", source = "parentComment.id")
     @Mapping(target = "likeCount", ignore = true)
     @Mapping(target = "replyCount", ignore = true)
+    @Mapping(target = "isLikedByCurrentUser", ignore = true)
     CommentDTO toCommentDTO(Comment comment);
 }

@@ -21,6 +21,7 @@ public class CommentDTO {
     private Long parentCommentId;
     private Integer likeCount;
     private Integer replyCount;
+    private Boolean isLikedByCurrentUser;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

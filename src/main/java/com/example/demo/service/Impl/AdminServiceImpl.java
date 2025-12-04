@@ -277,11 +277,13 @@ public class AdminServiceImpl implements AdminService {
                 .build());
         }
         System.out.println(activities);
-        
+
         return activities.stream()
-            .sorted((a, b) -> b.getTimestamp().compareTo(a.getTimestamp()))
-            .limit(30)
-            .collect(Collectors.toList());
+                .filter(a -> a.getTimestamp() != null)
+                .sorted((a, b) -> b.getTimestamp().compareTo(a.getTimestamp()))
+                .limit(30)
+                .collect(Collectors.toList());
+
     }
     
     private Double calculateGrowthRate(Long currentPeriod, Long previousPeriod) {

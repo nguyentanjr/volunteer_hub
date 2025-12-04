@@ -138,11 +138,16 @@ public class CommentServiceImpl implements CommentService {
         List<CommentDTO> commentDTOS = comments.stream().map(this::toCommentDTOWithCounts)
                 .toList();
 
-        Comment nextCursor = hasNext && !comments.isEmpty()
-                ? comments.get(commentDTOS.size() - 1)
+        Comment nextCursor = null;
+        if (hasNext && !comments.isEmpty() && !commentDTOS.isEmpty()) {
+            nextCursor = comments.get(commentDTOS.size() - 1);
+        }
+
+        String encodedCursor = nextCursor != null 
+                ? encodeCursor(nextCursor, commentSortType) 
                 : null;
 
-        return CommentCursorPageResponse.of(commentDTOS, encodeCursor(nextCursor, commentSortType), hasNext);
+        return CommentCursorPageResponse.of(commentDTOS, encodedCursor, hasNext);
 
     }
 
@@ -162,8 +167,12 @@ public class CommentServiceImpl implements CommentService {
 
         List<CommentDTO> commentDTOs = replyComments.stream().map(this::toCommentDTOWithCounts).toList();
 
-        Comment lastReplyComment = replyComments.get(replyComments.size() - 1);
-        String nextCursor = encodeCursor(lastReplyComment, CommentSortType.LATEST);
+        String nextCursor = null;
+        if (!replyComments.isEmpty() && hasNext) {
+            Comment lastReplyComment = replyComments.get(replyComments.size() - 1);
+            nextCursor = encodeCursor(lastReplyComment, CommentSortType.LATEST);
+        }
+        
         return CommentCursorPageResponse.of(commentDTOs, nextCursor, hasNext);
 
     }
@@ -201,10 +210,27 @@ public class CommentServiceImpl implements CommentService {
         CommentDTO commentDTO = commentMapper.toCommentDTO(comment);
         commentDTO.setLikeCount(likeRepository.countLikesByCommentId(comment.getId()));
         commentDTO.setReplyCount(commentRepository.countRepliesByCommentId(comment.getId()));
+
+        try {
+            User currentUser = userService.getCurrentUser();
+            if (currentUser != null) {
+                boolean liked = likeRepository.findByCommentIdAndUserId(comment.getId(), currentUser.getId()) != null;
+                commentDTO.setIsLikedByCurrentUser(liked);
+            } else {
+                commentDTO.setIsLikedByCurrentUser(false);
+            }
+        } catch (Exception e) {
+            // In case there is no authenticated user (e.g. public access), default to false
+            commentDTO.setIsLikedByCurrentUser(false);
+        }
         return commentDTO;
     }
 
     private String encodeCursor(Comment comment, CommentSortType sortType) {
+        if (comment == null) {
+            return null;
+        }
+        
         String cursorData;
 
         if(sortType.equals(CommentSortType.LATEST)) {

@@ -109,7 +109,7 @@ public class AuthServiceImpl implements AuthService {
         String accessToken = jwtUtils.generateJwtToken(authentication);
         String refreshToken = refreshTokenService.createRefreshToken(user).getToken();
         UserLoginResponseDTO userResponse = userMapper.toUserLoginResponseDTO(user);
-
+        log.info(authentication.getAuthorities().toString());
         return new JwtAuthenticationResponse(accessToken, refreshToken, userResponse);
     }
 
