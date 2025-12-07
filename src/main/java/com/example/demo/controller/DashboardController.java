@@ -21,7 +21,7 @@ public class DashboardController {
     private final VolunteerDashboardService volunteerDashboardService;
 
     @GetMapping("/manager")
-    @PreAuthorize("hasAnyRole('EVENT_MANAGER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('EVENT_MANAGER')")
     public ResponseEntity<ApiResponse<EventDashboardDTO>> getManagerDashboard() {
         EventDashboardDTO dashboard = eventDashboardService.getManagerDashboard();
         return ResponseEntity.ok(ApiResponse.success(dashboard, "Dashboard retrieved successfully"));

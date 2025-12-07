@@ -310,6 +310,12 @@ public class AdminServiceImpl implements AdminService {
                 .map(Tag::getName)
                 .collect(Collectors.toList());
         
+        // Handle null role - user might not have an active role set
+        String roleName = null;
+        if (user.getRole() != null) {
+            roleName = user.getRole().name();
+        }
+        
         return UserDetailDTO.builder()
                 .id(user.getId())
                 .username(user.getUsername())
@@ -318,9 +324,9 @@ public class AdminServiceImpl implements AdminService {
                 .lastName(user.getLastName())
                 .phoneNumber(user.getPhoneNumber())
                 .address(user.getAddress())
-                .role(user.getRole().name())
+                .role(roleName)
                 .enabled(user.isEnabled())
-                .authProvider(user.getAuthProvider().name())
+                .authProvider(user.getAuthProvider() != null ? user.getAuthProvider().name() : null)
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
                 .eventsCreatedCount(eventsCreatedCount)
