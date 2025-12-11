@@ -25,6 +25,9 @@ public class FileRecord {
 
     private String publicId;
 
+    @Column(name = "file_type")
+    private String fileType; // MIME type (e.g., image/png, video/mp4)
+
     @ManyToOne
     @JoinColumn(name = "user_id")
     @JsonIgnore

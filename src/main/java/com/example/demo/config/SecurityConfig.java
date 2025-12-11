@@ -59,50 +59,44 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         CsrfTokenRequestAttributeHandler requestHandler = new CsrfTokenRequestAttributeHandler();
         http
-                  .cors(cors -> {})
-//                .csrf(csrf -> csrf
-//                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-//                        .csrfTokenRequestHandler(requestHandler)
-//                        .ignoringRequestMatchers("/api/v1/auth/login", "/api/v1/auth/register","/api/v1/auth/logout")
-//                )
-
-                .csrf(csrf->csrf.disable())
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/auth/**").permitAll()
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/dashboard/manager/**").hasRole("EVENT_MANAGER")
                         .requestMatchers("/actuator/**").permitAll()
-                        .requestMatchers("/").permitAll()
+                        .requestMatchers("/ws/**").permitAll() // Allow WebSocket endpoint
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session
-                        .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
-                .oauth2Login(oauth2 -> oauth2
-                                .userInfoEndpoint(userInfo -> userInfo
-                                        .userService(oAuth2UserService)
-                                )
-                                .successHandler((request, response, authentication) -> {
-                                    // Ensure the principal is explicitly set as CustomOauth2User
-                                    Object principal = authentication.getPrincipal();
-                                    if (principal instanceof DefaultOidcUser) {
-                                        CustomOauth2User customOauth2User = oAuth2UserService.processOauth2User(null, (DefaultOidcUser) principal);
-                                        authentication.setAuthenticated(false); // Invalidate the current authentication
-                                        authentication = new CustomAuthenticationToken(customOauth2User, authentication.getAuthorities());
-                                    }
-                                    if (!(authentication.getPrincipal() instanceof CustomOauth2User)) {
-                                        throw new IllegalStateException("Authentication principal is not a CustomOauth2User. Found: " + principal.getClass().getName());
-                                    }
-                                    log.info("Authentication successful with CustomOauth2User: {}", ((CustomOauth2User) authentication.getPrincipal()).getName());
-                                    // Redirect to frontend with success
-                                    response.sendRedirect("http://localhost:5173/auth/success");
-                                })
-                                .failureHandler((request, response, exception) -> {
-                                    // Redirect to frontend with error
-                                    response.sendRedirect("http://localhost:5173/auth/failure" + "?error=" + exception.getMessage());
-                                })
-                )
+//                .oauth2Login(oauth2 -> oauth2
+//                                .userInfoEndpoint(userInfo -> userInfo
+//                                        .userService(oAuth2UserService)
+//                                )
+//                                .successHandler((request, response, authentication) -> {
+//                                    // Ensure the principal is explicitly set as CustomOauth2User
+//                                    Object principal = authentication.getPrincipal();
+//                                    if (principal instanceof DefaultOidcUser) {
+//                                        CustomOauth2User customOauth2User = oAuth2UserService.processOauth2User(null, (DefaultOidcUser) principal);
+//                                        authentication.setAuthenticated(false); // Invalidate the current authentication
+//                                        authentication = new CustomAuthenticationToken(customOauth2User, authentication.getAuthorities());
+//                                    }
+//                                    if (!(authentication.getPrincipal() instanceof CustomOauth2User)) {
+//                                        throw new IllegalStateException("Authentication principal is not a CustomOauth2User. Found: " + principal.getClass().getName());
+//                                    }
+//                                    log.info("Authentication successful with CustomOauth2User: {}", ((CustomOauth2User) authentication.getPrincipal()).getName());
+//                                    // Redirect to frontend with success
+//                                    response.sendRedirect("http://localhost:5173/auth/success");
+//                                })
+//                                .failureHandler((request, response, exception) -> {
+//                                    // Redirect to frontend with error
+//                                    response.sendRedirect("http://localhost:5173/auth/failure" + "?error=" + exception.getMessage());
+//                                })
+//                )
                 .addFilterBefore(authTokenFilter, UsernamePasswordAuthenticationFilter.class);;
 
         return http.build();

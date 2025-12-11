@@ -18,10 +18,12 @@ public interface NotificationService {
     void notifyManagerOnEventApproved(Event event, String message);
 
     void notifyManagerOnUserRegistrationCancelled(Long registrationId);
+    
+    void notifyManagerOnNewRegistration(Long registrationId);
 
     void notifyVolunteerOnEventUpdated(Event event);
 
-    void notifyAllMembersInEventOnNewPost(Event event, Long postId);
+    void notifyAllMembersInEventOnNewPost(Event event, com.example.demo.model.Post post);
 
     NotificationCursorPageResponse getAllNotifications(String cursor, int limit);
 
@@ -43,5 +45,13 @@ public interface NotificationService {
     void notifyUserOnNewComment(User postCreator, Comment comment);
 
     void notifyUserOnNewChildComment(User commentCreator, Comment comment);
+    
+    void notifyUserOnNewLike(User postCreator, com.example.demo.model.Like like);
+    
+    void notifyUserOnCommentLike(User commentCreator, com.example.demo.model.Like like);
+    
+    void notifyVolunteerOnRegistrationApproved(User volunteer, Event event, Long registrationId);
+    
+    void notifyVolunteerOnRegistrationRejected(User volunteer, Event event, Long registrationId);
 
 }

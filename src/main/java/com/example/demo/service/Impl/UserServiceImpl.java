@@ -4,6 +4,7 @@ import com.example.demo.dto.common.PaginationResponse;
 import com.example.demo.dto.user.UserResponse;
 import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.mapper.UserMapper;
+import com.example.demo.model.Registration;
 import com.example.demo.model.Role;
 import com.example.demo.model.User;
 import com.example.demo.repository.UserRepository;
@@ -23,7 +24,7 @@ import java.security.Principal;
 import java.util.List;
 
 @Slf4j
-@Service
+@Service("userService")
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
 

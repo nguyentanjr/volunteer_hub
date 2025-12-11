@@ -11,4 +11,5 @@ public class FileRecordDTO {
     private Long id;
     private String fileName;
     private String url;
+    private String fileType;
 }

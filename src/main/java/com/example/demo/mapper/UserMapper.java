@@ -41,7 +41,17 @@ public interface UserMapper {
     @Mapping(target = "roleNames", ignore = true)
     User toUser(RegisterRequest registerRequest);
 
+    @Mapping(target = "roles", expression = "java(mapRoles(user.getRoles()))")
     UserResponse toUserResponse(User user);
+    
+    // Helper method to map roles without circular references
+    default Set<com.example.demo.model.Role> mapRoles(Set<com.example.demo.model.Role> roles) {
+        if (roles == null) {
+            return null;
+        }
+        // Return roles as-is (Role entity doesn't have back reference to User)
+        return roles;
+    }
 
     UserLoginResponseDTO toUserLoginResponseDTO(User user);
 

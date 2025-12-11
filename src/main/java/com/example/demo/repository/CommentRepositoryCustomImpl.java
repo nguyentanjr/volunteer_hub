@@ -113,4 +113,25 @@ public class CommentRepositoryCustomImpl implements CommentRepositoryCustom {
 
         return query.getResultList();
     }
+
+    @Override
+    public List<Comment> findAllRepliesFlattened(Long parentCommentId, int limit) {
+        log.debug("Finding all replies (flattened) for parent comment {} with limit {}", parentCommentId, limit);
+        
+        // Get all comments that have this comment as an ancestor (direct or indirect)
+        // This query finds all comments in the subtree starting from parentCommentId
+        // Using a simpler approach: get all comments where parent_comment_id is in the subtree
+        // For now, we'll get direct replies only and let the service layer handle flattening
+        // This is a placeholder - actual flattening will be done in service layer
+        String jpql = "SELECT c FROM Comment c WHERE c.parentComment.id = :parentCommentId " +
+                "ORDER BY c.createdAt DESC, c.id DESC";
+        
+        TypedQuery<Comment> query = entityManager.createQuery(jpql, Comment.class);
+        query.setParameter("parentCommentId", parentCommentId);
+        if (limit > 0) {
+            query.setMaxResults(limit);
+        }
+        
+        return query.getResultList();
+    }
 }

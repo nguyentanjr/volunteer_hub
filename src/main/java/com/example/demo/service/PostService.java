@@ -17,5 +17,9 @@ public interface PostService {
 
     PostDTO createPost(Long eventId, List<MultipartFile> multipartFiles, CreatePostDTO createPostDTO) throws IOException;
 
+    void deletePost(Long postId);
 
+    PostDTO updatePost(Long postId, CreatePostDTO updatePostDTO);
+
+    PostDTO updatePostWithFiles(Long postId, String content, List<MultipartFile> files, List<Long> removeFileIds) throws IOException;
 }

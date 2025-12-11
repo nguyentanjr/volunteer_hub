@@ -9,6 +9,7 @@ import com.example.demo.repository.CommentRepository;
 import com.example.demo.repository.LikeRepository;
 import com.example.demo.repository.PostRepository;
 import com.example.demo.service.LikeService;
+import com.example.demo.service.NotificationService;
 import com.example.demo.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +27,7 @@ public class LikeServiceImpl implements LikeService {
     private final CommentRepository commentRepository;
     private final LikeRepository likeRepository;
     private final UserService userService;
+    private final NotificationService notificationService;
 
     @Transactional
     @CacheEvict(value = "dashboard", key = "'volunteer:' + #root.target.getCurrentUser().id")
@@ -50,6 +52,11 @@ public class LikeServiceImpl implements LikeService {
 
         likeRepository.save(newLike);
         log.info("User {} liked post {}", user.getId(), postId);
+        
+        // Notify post creator (only if not liking own post)
+        if (!post.getPostCreator().getId().equals(user.getId())) {
+            notificationService.notifyUserOnNewLike(post.getPostCreator(), newLike);
+        }
     }
 
 
@@ -73,6 +80,11 @@ public class LikeServiceImpl implements LikeService {
 
             likeRepository.save(like);
             log.info("User {} liked comment {}", user.getId(), commentId);
+            
+            // Notify comment creator (only if not liking own comment)
+            if (!comment.getUser().getId().equals(user.getId())) {
+                notificationService.notifyUserOnCommentLike(comment.getUser(), like);
+            }
         }
     }
 

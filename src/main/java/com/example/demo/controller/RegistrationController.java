@@ -44,14 +44,14 @@ public class RegistrationController {
     public ResponseEntity<ApiResponse<Page<RegistrationDTO>>> getAllRegistrationOfAnEvent(
             @PathVariable Long eventId,
             @RequestParam(defaultValue = "0") int pageNumber,
-            @RequestParam(defaultValue = "1 0") int pageSize,
+            @RequestParam(defaultValue = "10") int pageSize,
             @RequestParam(defaultValue = "id") String sortBy,
             @RequestParam(defaultValue = "asc") String sortDir) {
         Sort sort = sortDir.equalsIgnoreCase("asc")
                 ? Sort.by(sortBy).ascending()
                 : Sort.by(sortBy).descending();
         Pageable pageable = PageRequest.of(pageNumber, pageSize, sort);
-        return ResponseEntity.ok(ApiResponse.success(registrationService.getAllRegistration(pageable)));
+        return ResponseEntity.ok(ApiResponse.success(registrationService.getAllRegistrationByEventId(eventId, pageable)));
     }
 
     @DeleteMapping("/events/{eventId}")
@@ -61,7 +61,7 @@ public class RegistrationController {
     }
 
     @GetMapping("/my")
-    public ResponseEntity<ApiResponse<Page<EventDTO>>> getRegisteredEvents(
+    public ResponseEntity<ApiResponse<Page<com.example.demo.dto.event.RegisteredEventDTO>>> getRegisteredEvents(
             @RequestParam(defaultValue = "0") int pageNumber,
             @RequestParam(defaultValue = "10") int pageSize,
             @RequestParam(defaultValue = "id") String sortBy,
@@ -70,8 +70,16 @@ public class RegistrationController {
                 ? Sort.by(sortBy).ascending()
                 : Sort.by(sortBy).descending();
         Pageable pageable = PageRequest.of(pageNumber, pageSize, sort);
-        return ResponseEntity.ok(ApiResponse.success(registrationService.getRegisteredEvents(pageable)));
+        return ResponseEntity.ok(ApiResponse.success(registrationService.getRegisteredEventsWithStatus(pageable)));
     }
 
+    @GetMapping("/events/{eventId}/status")
+    public ResponseEntity<ApiResponse<RegistrationDTO>> getRegistrationStatus(@PathVariable Long eventId) {
+        RegistrationDTO registration = registrationService.getCurrentUserRegistrationForEvent(eventId);
+        if (registration == null) {
+            return ResponseEntity.ok(ApiResponse.success(null));
+        }
+        return ResponseEntity.ok(ApiResponse.success(registration));
+    }
 
 }

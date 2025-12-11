@@ -21,6 +21,9 @@ public class PostDTO {
 
     // User info
     private Long userId;
+    private String username;
+    private String userFullName;
+    private String userAvatarUrl;
 
     // Counts
     private Integer likeCount;

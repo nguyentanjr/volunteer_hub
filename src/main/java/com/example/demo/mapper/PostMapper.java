@@ -12,6 +12,9 @@ import java.time.LocalDateTime;
 public interface PostMapper {
 
     @Mapping(target = "userId", source = "postCreator.id")
+    @Mapping(target = "username", source = "postCreator.username")
+    @Mapping(target = "userAvatarUrl", source = "postCreator.imageUrl")
+    @Mapping(target = "userFullName", expression = "java(fullName(post))")
     @Mapping(target = "likeCount", ignore = true)
     @Mapping(target = "commentCount", ignore = true)
     @Mapping(target = "isLikedByCurrentUser", ignore = true)
@@ -19,5 +22,13 @@ public interface PostMapper {
     @Mapping(target = "isPinned", source = "pinned")
     PostDTO toPostDTO(Post post);
 
-
+    default String fullName(Post post) {
+        if (post == null || post.getPostCreator() == null) return null;
+        var u = post.getPostCreator();
+        String first = u.getFirstName();
+        String last = u.getLastName();
+        String full = ((first != null ? first : "") + " " + (last != null ? last : "")).trim();
+        if (!full.isBlank()) return full;
+        return u.getUsername();
+    }
 }

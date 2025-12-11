@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 
-@Service
+
 public interface UserService {
 
     PaginationResponse<UserResponse> getAllUsers(Pageable pageable);

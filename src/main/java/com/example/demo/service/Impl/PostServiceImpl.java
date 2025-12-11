@@ -7,6 +7,7 @@ import com.example.demo.mapper.PostMapper;
 import com.example.demo.model.*;
 import com.example.demo.repository.*;
 import com.example.demo.service.CloudinaryService;
+import com.example.demo.service.NotificationService;
 import com.example.demo.service.PostService;
 import com.example.demo.service.UserService;
 import lombok.Getter;
@@ -41,6 +42,8 @@ public class PostServiceImpl implements PostService {
     private final CommentRepository commentRepository;
     private final PostMapper postMapper;
     private final LikeRepository likeRepository;
+    private final FileRepository fileRepository;
+    private final NotificationService notificationService;
 
     @Override
     public Page<PostDTO> getAllPosts(Long eventId, Pageable pageable) {
@@ -53,7 +56,7 @@ public class PostServiceImpl implements PostService {
     }
 
     @Transactional
-    @CacheEvict(value = "dashboard", key = "'volunteer:' + #root.target.userService.getCurrentUser().id")
+    @CacheEvict(value = "dashboard", key = "'volunteer:' + @userService.getCurrentUser().id")
     public PostDTO createPost(Long eventId, List<MultipartFile> multipartFiles, CreatePostDTO createPostDTO) throws IOException {
         log.info("Create new post with files in event: {}", eventId);
 
@@ -65,6 +68,7 @@ public class PostServiceImpl implements PostService {
         if (multipartFiles == null) {
             multipartFiles = new ArrayList<>();
         }
+        log.info("Incoming multipart files count: {}", multipartFiles.size());
         boolean hasFiles = multipartFiles.stream().anyMatch(f -> f != null && !f.isEmpty());
         boolean hasContent = createPostDTO.getContent() != null && !createPostDTO.getContent().trim().isEmpty();
         if (!hasFiles && !hasContent) {
@@ -72,12 +76,18 @@ public class PostServiceImpl implements PostService {
         }
         // Get current user
         User user = userService.getCurrentUser();
+        log.info("User {} attempting to create post in event {}", user.getUsername(), eventId);
 
         Registration registration = registrationRepository.findRegistrationByUserIdAndEventId(user.getId(), eventId)
-                .orElseThrow(() -> new ResourceNotFoundException("Registration not found"));
+                .orElseThrow(() -> {
+                    log.error("Registration not found for user {} in event {}", user.getId(), eventId);
+                    return new ResourceNotFoundException("You must register for this event before posting");
+                });
 
+        log.info("Registration found with status: {}", registration.getStatus());
         if(!registration.getStatus().equals(Registration.RegistrationStatus.APPROVED)) {
-            throw new IllegalStateException("User must be approved to create post");
+            log.error("User {} registration status is {} (not APPROVED)", user.getId(), registration.getStatus());
+            throw new IllegalStateException("Your registration must be approved before you can create posts");
         }
 
         // Get event
@@ -109,8 +119,14 @@ public class PostServiceImpl implements PostService {
                 }
             }
             savedPost.setFileRecords(fileRecords);
+            // Persist FileRecords and update post association
+            fileRepository.saveAll(fileRecords);
+            savedPost = postRepository.save(savedPost);
         }
-
+        
+        // Notify all approved members in the event about the new post
+        notificationService.notifyAllMembersInEventOnNewPost(event, savedPost);
+        
         return toDTOWithLikeCountAndCommentCount(savedPost);
     }
 
@@ -118,6 +134,14 @@ public class PostServiceImpl implements PostService {
         PostDTO postDTO = postMapper.toPostDTO(post);
         postDTO.setCommentCount(commentRepository.countCommentsByPostId(postDTO.getId()));
         postDTO.setLikeCount(likeRepository.countLikesByPostId(postDTO.getId()));
+
+        // Map file records to DTO (ensure FE receives media)
+        if (post.getFileRecords() != null && !post.getFileRecords().isEmpty()) {
+            List<com.example.demo.dto.file.FileRecordDTO> fileDTOs = post.getFileRecords().stream()
+                    .map(fr -> new com.example.demo.dto.file.FileRecordDTO(fr.getId(), fr.getFileName(), fr.getUrl(), fr.getFileType()))
+                    .toList();
+            postDTO.setFiles(fileDTOs);
+        }
 
         try {
             User currentUser = userService.getCurrentUser();
@@ -133,5 +157,87 @@ public class PostServiceImpl implements PostService {
         }
 
         return postDTO;
+    }
+
+    @Override
+    @Transactional
+    public void deletePost(Long postId) {
+        log.info("Deleting post: {}", postId);
+
+        User currentUser = userService.getCurrentUser();
+        Post post = postRepository.findById(postId)
+                .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+
+        if (!post.getPostCreator().getId().equals(currentUser.getId())) {
+            throw new com.example.demo.exception.UnauthorizedException("You are not authorized to delete this post");
+        }
+
+        postRepository.delete(post);
+        log.info("Post deleted successfully: {}", postId);
+    }
+
+    @Override
+    @Transactional
+    public PostDTO updatePost(Long postId, CreatePostDTO updatePostDTO) {
+        log.info("Updating post: {}", postId);
+
+        User currentUser = userService.getCurrentUser();
+        Post post = postRepository.findById(postId)
+                .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+
+        if (!post.getPostCreator().getId().equals(currentUser.getId())) {
+            throw new com.example.demo.exception.UnauthorizedException("You are not authorized to update this post");
+        }
+
+        post.setContent(updatePostDTO.getContent());
+        post.setUpdatedAt(java.time.LocalDateTime.now());
+
+        Post savedPost = postRepository.save(post);
+        return toDTOWithLikeCountAndCommentCount(savedPost);
+    }
+
+    @Override
+    @Transactional
+    public PostDTO updatePostWithFiles(Long postId, String content, List<MultipartFile> files, List<Long> removeFileIds) throws IOException {
+        log.info("Updating post with files: {}", postId);
+
+        User currentUser = userService.getCurrentUser();
+        Post post = postRepository.findById(postId)
+                .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+
+        if (!post.getPostCreator().getId().equals(currentUser.getId())) {
+            throw new com.example.demo.exception.UnauthorizedException("You are not authorized to update this post");
+        }
+
+        if (content != null) {
+            post.setContent(content);
+        }
+
+        // Remove files if requested
+        if (removeFileIds != null && !removeFileIds.isEmpty()) {
+            if (post.getFileRecords() != null) {
+                post.getFileRecords().removeIf(fr -> removeFileIds.contains(fr.getId()));
+            }
+            fileRepository.deleteAllById(removeFileIds);
+        }
+
+        boolean hasFiles = files != null && !files.isEmpty();
+
+        if (hasFiles) {
+            List<FileRecord> fileRecords = post.getFileRecords() != null ? post.getFileRecords() : new ArrayList<>();
+            for (MultipartFile file : files) {
+                if (file != null && !file.isEmpty()) {
+                    FileRecord fileRecord = cloudinaryService.uploadFileForPostOrComment(file, post);
+                    fileRecords.add(fileRecord);
+                    fileRepository.save(fileRecord);
+                    log.info("File uploaded for post update: {}", file.getOriginalFilename());
+                }
+            }
+            post.setFileRecords(fileRecords);
+        }
+
+        post.setUpdatedAt(java.time.LocalDateTime.now());
+        Post savedPost = postRepository.save(post);
+        return toDTOWithLikeCountAndCommentCount(savedPost);
     }
 }

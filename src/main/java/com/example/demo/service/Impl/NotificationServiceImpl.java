@@ -127,33 +127,83 @@ public class NotificationServiceImpl implements NotificationService {
                 .setRelatedId(registrationId)
                 .setMessage(message);
         notificationRepository.save(notification);
-        simpMessagingTemplate.convertAndSendToUser(eventCreator.getUsername(), "/queue/notification", notification);
+        NotificationDTO notificationDTO = notificationMapper.toNotificationDTO(notification);
+        simpMessagingTemplate.convertAndSendToUser(eventCreator.getUsername(), "/queue/notifications", notificationDTO);
     }
 
     @Async("notificationExecutor")
-    public void notifyAllMembersInEventOnNewPost(Event event, Long postId) {
-        log.info("Notify all member on new post");
-        List<Registration> registrationList = event.getRegistrations();
-        registrationList.stream()
-                .filter(registration -> registration.getStatus() == Registration.RegistrationStatus.APPROVED)
-                .forEach(registration -> {
-                    User user = registration.getUser();
+    @Override
+    public void notifyManagerOnNewRegistration(Long registrationId) {
+        log.info("Notify Manager on new registration: {}", registrationId);
+        Registration registration = registrationRepository.findRegistrationById(registrationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Registration not found"));
+        Event event = registration.getEvent();
+        User eventCreator = event.getCreator();
+        User volunteer = registration.getUser();
+        
+        String message = "Volunteer " + volunteer.getUsername() 
+                + " has registered for your event '" + event.getTitle() + "'.";
+        
+        Notification notification = new Notification()
+                .setUser(eventCreator)
+                .setTitle("New Registration")
+                .setMessage(message)
+                .setRelatedType(Notification.RelatedType.REGISTRATION)
+                .setRelatedId(registrationId);
+        
+        notificationRepository.save(notification);
+        NotificationDTO notificationDTO = notificationMapper.toNotificationDTO(notification);
+        simpMessagingTemplate.convertAndSendToUser(
+                eventCreator.getUsername(),
+                "/queue/notifications",
+                notificationDTO
+        );
+    }
 
-                    Notification notification = new Notification()
-                            .setTitle("New post coming!")
-                            .setMessage("A new post has been posted. Click to see! ")
-                            .setUser(user)
-                            .setRelatedType(Notification.RelatedType.POST)
-                            .setRelatedId(postId);
-                    notificationRepository.save(notification);
-
-                    simpMessagingTemplate.convertAndSendToUser(
-                            user.getUsername(),
-                            "/queue/notification",
-                            notification
-                    );
-                });
-
+    @Async("notificationExecutor")
+    public void notifyAllMembersInEventOnNewPost(Event event, Post post) {
+        log.info("Notify all approved members in event {} about new post {}", event.getId(), post.getId());
+        
+        // The post is already persisted; use it directly
+        User postCreator = post.getPostCreator();
+        
+        // Query all APPROVED registrations for this event directly from database
+        List<Registration> approvedRegistrations = registrationRepository.findByEventIdAndStatus(
+                event.getId(), 
+                Registration.RegistrationStatus.APPROVED
+        );
+        
+        log.info("Found {} approved registrations for event {}", approvedRegistrations.size(), event.getId());
+        
+        // Send notification to all approved members (excluding post creator)
+        for (Registration registration : approvedRegistrations) {
+            User user = registration.getUser();
+            
+            // Skip notification for post creator
+            if (user.getId().equals(postCreator.getId())) {
+                log.debug("Skipping notification for post creator: {}", user.getUsername());
+                continue;
+            }
+            
+            Notification notification = new Notification()
+                    .setTitle("New post coming!")
+                    .setMessage("A new post has been posted. Click to see!")
+                    .setUser(user)
+                    .setRelatedType(Notification.RelatedType.POST)
+                .setRelatedId(post.getId());
+            
+            notificationRepository.save(notification);
+            
+            NotificationDTO notificationDTO = notificationMapper.toNotificationDTO(notification);
+            simpMessagingTemplate.convertAndSendToUser(
+                    user.getUsername(),
+                    "/queue/notifications",
+                    notificationDTO
+            );
+            
+            log.debug("Sent notification to user: {}", user.getUsername());
+        }
+        
     }
 
     @Override
@@ -422,6 +472,92 @@ public class NotificationServiceImpl implements NotificationService {
 
         notificationRepository.save(notification);
 
+        NotificationDTO notificationDTO = notificationMapper.toNotificationDTO(notification);
+        simpMessagingTemplate.convertAndSendToUser(
+                commentCreator.getUsername(),
+                "/queue/notifications",
+                notificationDTO
+        );
+    }
+
+    @Async("notificationExecutor")
+    @Override
+    public void notifyVolunteerOnRegistrationApproved(User volunteer, Event event, Long registrationId) {
+        log.info("Notifying volunteer {} about approved registration", volunteer.getUsername());
+        
+        Notification notification = new Notification()
+                .setUser(volunteer)
+                .setTitle("Registration Approved")
+                .setMessage("Your registration for event '" + event.getTitle() + "' has been approved!")
+                .setRelatedType(Notification.RelatedType.REGISTRATION)
+                .setRelatedId(registrationId);
+        
+        notificationRepository.save(notification);
+        NotificationDTO notificationDTO = notificationMapper.toNotificationDTO(notification);
+        simpMessagingTemplate.convertAndSendToUser(
+                volunteer.getUsername(),
+                "/queue/notifications",
+                notificationDTO
+        );
+    }
+
+    @Async("notificationExecutor")
+    @Override
+    public void notifyVolunteerOnRegistrationRejected(User volunteer, Event event, Long registrationId) {
+        log.info("Notifying volunteer {} about rejected registration", volunteer.getUsername());
+        
+        Notification notification = new Notification()
+                .setUser(volunteer)
+                .setTitle("Registration Rejected")
+                .setMessage("Your registration for event '" + event.getTitle() + "' has been rejected!")
+                .setRelatedType(Notification.RelatedType.REGISTRATION)
+                .setRelatedId(registrationId);
+        
+        notificationRepository.save(notification);
+        NotificationDTO notificationDTO = notificationMapper.toNotificationDTO(notification);
+        simpMessagingTemplate.convertAndSendToUser(
+                volunteer.getUsername(),
+                "/queue/notifications",
+                notificationDTO
+        );
+    }
+
+    @Async("notificationExecutor")
+    @Override
+    public void notifyUserOnNewLike(User postCreator, Like like) {
+        log.info("Notifying user {} about new like on post", postCreator.getUsername());
+        
+        String likerUsername = like.getUser().getUsername();
+        Notification notification = new Notification()
+                .setUser(postCreator)
+                .setTitle("New like")
+                .setMessage(likerUsername + " liked your post")
+                .setRelatedType(Notification.RelatedType.LIKE)
+                .setRelatedId(like.getPost().getId());
+        
+        notificationRepository.save(notification);
+        NotificationDTO notificationDTO = notificationMapper.toNotificationDTO(notification);
+        simpMessagingTemplate.convertAndSendToUser(
+                postCreator.getUsername(),
+                "/queue/notifications",
+                notificationDTO
+        );
+    }
+
+    @Async("notificationExecutor")
+    @Override
+    public void notifyUserOnCommentLike(User commentCreator, Like like) {
+        log.info("Notifying user {} about new like on comment", commentCreator.getUsername());
+        
+        String likerUsername = like.getUser().getUsername();
+        Notification notification = new Notification()
+                .setUser(commentCreator)
+                .setTitle("New like")
+                .setMessage(likerUsername + " liked your comment")
+                .setRelatedType(Notification.RelatedType.LIKE)
+                .setRelatedId(like.getComment().getId());
+        
+        notificationRepository.save(notification);
         NotificationDTO notificationDTO = notificationMapper.toNotificationDTO(notification);
         simpMessagingTemplate.convertAndSendToUser(
                 commentCreator.getUsername(),

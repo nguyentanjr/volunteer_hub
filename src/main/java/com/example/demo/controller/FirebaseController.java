@@ -6,6 +6,8 @@ import com.example.demo.model.UserFcmToken;
 import com.example.demo.service.FirebaseService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,6 +19,8 @@ public class FirebaseController {
 
     private final FirebaseService firebaseService;
 
+    @PostMapping("/token/register")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<UserFcmToken>> registerToken(@RequestBody UserFcmTokenDTO userFcmTokenDTO) {
         return ResponseEntity.ok(ApiResponse.success(firebaseService.registerTokenForUser(userFcmTokenDTO)));
     }

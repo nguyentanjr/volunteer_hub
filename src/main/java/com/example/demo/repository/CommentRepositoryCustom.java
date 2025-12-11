@@ -19,4 +19,7 @@ public interface CommentRepositoryCustom {
     List<Comment> findRepliesByParentCommentIdOrderByLatestWithLimit(Long parentCommentId, int limit);
 
     List<Comment> findRepliesOrderByLatestWithCursorAndLimit(Long parentCommentId, LocalDateTime cursorDate, int limit);
+    
+    // Get all replies (flatten) - includes all nested replies at any level
+    List<Comment> findAllRepliesFlattened(Long parentCommentId, int limit);
 }

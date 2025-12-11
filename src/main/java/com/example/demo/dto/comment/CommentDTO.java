@@ -17,11 +17,16 @@ public class CommentDTO {
     private String content;
     private Long userId;
     private String username;
+    private String userFullName;
+    private String userAvatarUrl;
     private Long postId;
     private Long parentCommentId;
+    private String parentAuthorName;
+    private String parentUsername;
     private Integer likeCount;
     private Integer replyCount;
     private Boolean isLikedByCurrentUser;
+    private List<FileRecordDTO> fileRecords;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }
