@@ -23,6 +23,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -56,9 +57,12 @@ public class AdminServiceImpl implements AdminService {
     private final RoleRepository roleRepository;
 
 
-    @CacheEvict(value = "dashboard", allEntries = true)
+    @Caching(evict = {
+            @CacheEvict(value = "dashboard", allEntries = true),
+            @CacheEvict(value = "eventsDetails", key = "#eventId")
+    })
     public Event approveEvent(Long eventId) throws FirebaseMessagingException {
-        log.info("Approve event with ID: {} (clearing dashboard cache)", eventId);
+        log.info("Approve event with ID: {} (clearing dashboard and event details cache)", eventId);
 
         Event event = eventRepository.getEventById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
@@ -70,9 +74,12 @@ public class AdminServiceImpl implements AdminService {
         return eventRepository.save(event);
     }
 
-    @CacheEvict(value = "dashboard", allEntries = true)
+    @Caching(evict = {
+            @CacheEvict(value = "dashboard", allEntries = true),
+            @CacheEvict(value = "eventsDetails", key = "#eventId")
+    })
     public Event rejectEvent(Long eventId, String reason) throws FirebaseMessagingException {
-        log.info("Reject event with ID: {} (clearing dashboard cache)", eventId);
+        log.info("Reject event with ID: {} (clearing dashboard and event details cache)", eventId);
         Event event = eventRepository.getEventById(eventId)
 
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
@@ -310,12 +317,6 @@ public class AdminServiceImpl implements AdminService {
                 .map(Tag::getName)
                 .collect(Collectors.toList());
         
-        // Handle null role - user might not have an active role set
-        String roleName = null;
-        if (user.getRole() != null) {
-            roleName = user.getRole().name();
-        }
-        
         return UserDetailDTO.builder()
                 .id(user.getId())
                 .username(user.getUsername())
@@ -324,9 +325,9 @@ public class AdminServiceImpl implements AdminService {
                 .lastName(user.getLastName())
                 .phoneNumber(user.getPhoneNumber())
                 .address(user.getAddress())
-                .role(roleName)
+                .role(user.getRole().name())
                 .enabled(user.isEnabled())
-                .authProvider(user.getAuthProvider() != null ? user.getAuthProvider().name() : null)
+                .authProvider(user.getAuthProvider().name())
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
                 .eventsCreatedCount(eventsCreatedCount)

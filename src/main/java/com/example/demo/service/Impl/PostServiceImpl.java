@@ -5,6 +5,7 @@ import com.example.demo.dto.post_content.PostDTO;
 import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.mapper.PostMapper;
 import com.example.demo.model.*;
+import com.example.demo.model.Role;
 import com.example.demo.repository.*;
 import com.example.demo.service.CloudinaryService;
 import com.example.demo.service.NotificationService;
@@ -78,21 +79,51 @@ public class PostServiceImpl implements PostService {
         User user = userService.getCurrentUser();
         log.info("User {} attempting to create post in event {}", user.getUsername(), eventId);
 
-        Registration registration = registrationRepository.findRegistrationByUserIdAndEventId(user.getId(), eventId)
-                .orElseThrow(() -> {
-                    log.error("Registration not found for user {} in event {}", user.getId(), eventId);
-                    return new ResourceNotFoundException("You must register for this event before posting");
-                });
-
-        log.info("Registration found with status: {}", registration.getStatus());
-        if(!registration.getStatus().equals(Registration.RegistrationStatus.APPROVED)) {
-            log.error("User {} registration status is {} (not APPROVED)", user.getId(), registration.getStatus());
-            throw new IllegalStateException("Your registration must be approved before you can create posts");
-        }
-
-        // Get event
+        // Get event first to check status and creator
         Event event = eventRepository.getEventById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
+
+        // Check if event is PLANNED - feed is not available for PLANNED events
+        if (event.getStatus() == Event.EventStatus.PLANNED) {
+            log.error("Event {} is PLANNED, feed is not available", eventId);
+            throw new IllegalStateException("Event feed is not available for events with PLANNED status");
+        }
+
+        // Check if user is the event creator (manager)
+        boolean isEventCreator = event.getCreator().getId().equals(user.getId());
+        boolean isManager = user.hasRole(Role.RoleName.EVENT_MANAGER) || user.hasRole(Role.RoleName.ADMIN);
+
+        // If user is manager but not the creator, they need to register
+        if (isManager && !isEventCreator) {
+            log.info("User {} is manager but not creator of event {}, checking registration", user.getId(), eventId);
+            Registration registration = registrationRepository.findRegistrationByUserIdAndEventId(user.getId(), eventId)
+                    .orElseThrow(() -> {
+                        log.error("Registration not found for manager {} in event {}", user.getId(), eventId);
+                        return new ResourceNotFoundException("You must register for this event before posting");
+                    });
+
+            log.info("Registration found with status: {}", registration.getStatus());
+            if(!registration.getStatus().equals(Registration.RegistrationStatus.APPROVED)) {
+                log.error("Manager {} registration status is {} (not APPROVED)", user.getId(), registration.getStatus());
+                throw new IllegalStateException("Your registration must be approved before you can create posts");
+            }
+        } else if (!isEventCreator) {
+            // Regular volunteers need registration
+            Registration registration = registrationRepository.findRegistrationByUserIdAndEventId(user.getId(), eventId)
+                    .orElseThrow(() -> {
+                        log.error("Registration not found for user {} in event {}", user.getId(), eventId);
+                        return new ResourceNotFoundException("You must register for this event before posting");
+                    });
+
+            log.info("Registration found with status: {}", registration.getStatus());
+            if(!registration.getStatus().equals(Registration.RegistrationStatus.APPROVED)) {
+                log.error("User {} registration status is {} (not APPROVED)", user.getId(), registration.getStatus());
+                throw new IllegalStateException("Your registration must be approved before you can create posts");
+            }
+        } else {
+            // Event creator (manager) can always post
+            log.info("User {} is the creator of event {}, allowing post creation", user.getId(), eventId);
+        }
 
         // Create and save post first (needed for FileRecord relationships)
         Post post = new Post()

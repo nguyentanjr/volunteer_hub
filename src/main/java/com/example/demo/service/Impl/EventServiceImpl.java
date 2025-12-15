@@ -127,9 +127,10 @@ public class EventServiceImpl implements EventService {
     }
 
     @Override
-    @Cacheable(value = "eventsDetails", key = "#eventId")
+    // Temporarily disabled cache to fix status display issue
+    // @Cacheable(value = "eventsDetails", key = "#eventId")
     public EventDTO getEventDetails(Long eventId) {
-        log.info("Get event details with ID : {}", eventId);
+        log.info("Get event details with ID : {} (cache disabled)", eventId);
         Event event = eventRepository.getEventById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found"));;
         return eventMapper.toEventDTO(event);

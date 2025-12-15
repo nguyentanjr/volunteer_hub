@@ -168,7 +168,7 @@ public class NotificationServiceImpl implements NotificationService {
         User postCreator = post.getPostCreator();
         
         // Query all APPROVED registrations for this event directly from database
-        List<Registration> approvedRegistrations = registrationRepository.findByEventIdAndStatus(
+        List<Registration> approvedRegistrations = registrationRepository.findByEventIdAndStatusList(
                 event.getId(), 
                 Registration.RegistrationStatus.APPROVED
         );

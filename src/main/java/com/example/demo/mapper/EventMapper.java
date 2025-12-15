@@ -40,6 +40,7 @@ public interface EventMapper {
 
     @Mapping(target = "eventId", source = "event.id")
     @Mapping(target = "creatorUsername", source = "event.creator.username")
+    @Mapping(target = "creatorId", source = "event.creator.id")
     EventDTO toEventDTO(Event event);
 
     EventApprovedDTO toEventApprovedDTO(Event event);

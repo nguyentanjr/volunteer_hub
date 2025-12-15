@@ -26,14 +26,8 @@ public class RegistrationDTO {
 
     private LocalDateTime completedAt;
 
-    private Boolean eventCompleted;
-
     private UserResponse userResponse;
 
     private Long eventId;
-
-    private String eventTitle;
-    private String eventLocation;
-    private LocalDateTime eventStartTime;
 
 }

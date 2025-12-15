@@ -33,7 +33,6 @@ public class ExportServiceImpl implements ExportService {
     private final EventRepository eventRepository;
     private final UserRepository userRepository;
     private final RegistrationRepository registrationRepository;
-    private final ObjectMapper objectMapper;
     
     @Override
     public byte[] exportEventsToCSV() throws IOException {
@@ -241,6 +240,110 @@ public class ExportServiceImpl implements ExportService {
         mapper.enable(SerializationFeature.INDENT_OUTPUT);
         
         return mapper.writeValueAsBytes(userList);
+    }
+    
+    @Override
+    public byte[] exportRegistrationsToCSV(Long eventId, String status, Boolean completedOnly) throws IOException {
+        log.info("Exporting registrations for event {} to CSV - status: {}, completedOnly: {}", eventId, status, completedOnly);
+        
+        Registration.RegistrationStatus registrationStatus = null;
+        if (status != null && !status.isEmpty()) {
+            try {
+                registrationStatus = Registration.RegistrationStatus.valueOf(status.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                log.warn("Invalid status: {}", status);
+            }
+        }
+        
+        List<Registration> registrations = registrationRepository.findRegistrationsForExport(
+                eventId, registrationStatus, completedOnly);
+        
+        return generateRegistrationsCSV(registrations);
+    }
+    
+    @Override
+    public byte[] exportRegistrationsToJSON(Long eventId, String status, Boolean completedOnly) throws IOException {
+        log.info("Exporting registrations for event {} to JSON - status: {}, completedOnly: {}", eventId, status, completedOnly);
+        
+        Registration.RegistrationStatus registrationStatus = null;
+        if (status != null && !status.isEmpty()) {
+            try {
+                registrationStatus = Registration.RegistrationStatus.valueOf(status.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                log.warn("Invalid status: {}", status);
+            }
+        }
+        
+        List<Registration> registrations = registrationRepository.findRegistrationsForExport(
+                eventId, registrationStatus, completedOnly);
+        
+        return generateRegistrationsJSON(registrations);
+    }
+    
+    private byte[] generateRegistrationsCSV(List<Registration> registrations) throws IOException {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        PrintWriter writer = new PrintWriter(outputStream);
+        
+        // CSV Header
+        writer.println("ID,User ID,Username,Email,First Name,Last Name,Event ID,Event Title,Status,Registered At,Completed At,Event Completed");
+        
+        // CSV Data
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        for (Registration reg : registrations) {
+            User user = reg.getUser();
+            Event event = reg.getEvent();
+            
+            writer.printf("%d,%d,\"%s\",\"%s\",\"%s\",\"%s\",%d,\"%s\",%s,%s,%s,%s%n",
+                    reg.getId(),
+                    user.getId(),
+                    escapeCsv(user.getUsername()),
+                    escapeCsv(user.getEmail()),
+                    escapeCsv(user.getFirstName()),
+                    escapeCsv(user.getLastName()),
+                    event.getId(),
+                    escapeCsv(event.getTitle()),
+                    reg.getStatus(),
+                    reg.getRegisteredAt() != null ? reg.getRegisteredAt().format(formatter) : "",
+                    reg.getCompletedAt() != null ? reg.getCompletedAt().format(formatter) : "",
+                    reg.getEventCompleted() != null ? reg.getEventCompleted() : false
+            );
+        }
+        
+        writer.flush();
+        writer.close();
+        
+        return outputStream.toByteArray();
+    }
+    
+    private byte[] generateRegistrationsJSON(List<Registration> registrations) throws IOException {
+        List<Map<String, Object>> registrationList = registrations.stream()
+                .map(reg -> {
+                    Map<String, Object> regMap = new HashMap<>();
+                    User user = reg.getUser();
+                    Event event = reg.getEvent();
+                    
+                    regMap.put("id", reg.getId());
+                    regMap.put("userId", user.getId());
+                    regMap.put("username", user.getUsername());
+                    regMap.put("email", user.getEmail());
+                    regMap.put("firstName", user.getFirstName());
+                    regMap.put("lastName", user.getLastName());
+                    regMap.put("eventId", event.getId());
+                    regMap.put("eventTitle", event.getTitle());
+                    regMap.put("status", reg.getStatus());
+                    regMap.put("registeredAt", reg.getRegisteredAt());
+                    regMap.put("completedAt", reg.getCompletedAt());
+                    regMap.put("eventCompleted", reg.getEventCompleted());
+                    return regMap;
+                })
+                .collect(Collectors.toList());
+        
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        mapper.enable(SerializationFeature.INDENT_OUTPUT);
+        
+        return mapper.writeValueAsBytes(registrationList);
     }
     
     private String escapeCsv(String value) {

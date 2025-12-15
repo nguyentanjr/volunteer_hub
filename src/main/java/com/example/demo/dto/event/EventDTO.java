@@ -21,4 +21,5 @@ public class EventDTO {
     private Integer maxParticipants;
     private LocalDateTime createdAt = LocalDateTime.now();
     private String creatorUsername;
+    private Long creatorId;
 }
