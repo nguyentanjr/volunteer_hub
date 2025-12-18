@@ -31,5 +31,8 @@ build/
 
 ### VS Code ###
 .vscode/
-application*
-*.json
+
+### Firebase & Sensitive Files ###
+src/main/resources/firebase-service-account.json
+src/main/resources/application.properties
+src/main/resources/application-*.properties

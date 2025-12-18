@@ -19,7 +19,7 @@ public class EventDTO {
     private String location;
     private Event.EventStatus status;
     private Integer maxParticipants;
+    private Integer currentParticipants; // Current registered participants (APPROVED + PENDING)
     private LocalDateTime createdAt = LocalDateTime.now();
     private String creatorUsername;
-    private Long creatorId;
 }

@@ -71,6 +71,8 @@ public class EventServiceImpl implements EventService {
         Event event = buildEventFromDTO(createEventDTO, user);
         Event savedEvent = eventRepository.save(event);
         EventDTO eventDTO = eventMapper.toEventDTO(savedEvent);
+        // New event has 0 participants
+        eventDTO.setCurrentParticipants(0);
         handleEventCreationSideEffects(eventDTO);
 
         log.info("Event created successfully: id={}, title={}", savedEvent.getId(), savedEvent.getTitle());
@@ -115,7 +117,13 @@ public class EventServiceImpl implements EventService {
     @Override
     public Page<EventDTO> getAllEvents(Pageable pageable) {
         log.info("Get event titles");
-        return eventRepository.findAllEvent(pageable).map(eventMapper::toEventDTO);
+        return eventRepository.findAllEvent(pageable).map(event -> {
+            EventDTO dto = eventMapper.toEventDTO(event);
+            // Calculate real-time count from registrations
+            int actualCount = calculateParticipantCount(event.getId());
+            dto.setCurrentParticipants(actualCount);
+            return dto;
+        });
     }
 
     @Override
@@ -123,25 +131,50 @@ public class EventServiceImpl implements EventService {
         log.info("Get my events");
         User user = getCurrentUser();
         return eventRepository.getMyEvents(user.getId(), pageable)
-                .map(eventMapper::toEventDTO);
+                .map(event -> {
+                    EventDTO dto = eventMapper.toEventDTO(event);
+                    // Calculate real-time count from registrations
+                    int actualCount = calculateParticipantCount(event.getId());
+                    dto.setCurrentParticipants(actualCount);
+                    return dto;
+                });
     }
 
     @Override
-    // Temporarily disabled cache to fix status display issue
-    // @Cacheable(value = "eventsDetails", key = "#eventId")
+    // Disable cache to ensure participant count is always real-time
+    // Cache is evicted when registrations change, but to be safe, we calculate count fresh each time
     public EventDTO getEventDetails(Long eventId) {
-        log.info("Get event details with ID : {} (cache disabled)", eventId);
+        log.info("Get event details with ID : {}", eventId);
         Event event = eventRepository.getEventById(eventId)
-                .orElseThrow(() -> new ResourceNotFoundException("Event not found"));;
-        return eventMapper.toEventDTO(event);
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
+        EventDTO dto = eventMapper.toEventDTO(event);
+        // Calculate real-time count from registrations (always fresh, not cached)
+        int actualCount = calculateParticipantCount(eventId);
+        dto.setCurrentParticipants(actualCount);
+        return dto;
+    }
+
+    /**
+     * Calculate actual participant count from registrations (APPROVED + PENDING)
+     * This ensures count is always accurate, regardless of DB field sync
+     */
+    private int calculateParticipantCount(Long eventId) {
+        int approvedCount = registrationRepository.countByEventIdAndStatus(eventId, Registration.RegistrationStatus.APPROVED);
+        int pendingCount = registrationRepository.countByEventIdAndStatus(eventId, Registration.RegistrationStatus.PENDING);
+        return approvedCount + pendingCount;
     }
 
     @Override
     @Cacheable(value = "events", key = "'pending'")
     public List<EventDTO> getPendingEvents() {
         log.info("Get pending events");
-        return eventRepository.getPendingEvents().stream().map(eventMapper::toEventDTO)
-                .toList();
+        return eventRepository.getPendingEvents().stream().map(event -> {
+            EventDTO dto = eventMapper.toEventDTO(event);
+            // Calculate real-time count from registrations
+            int actualCount = calculateParticipantCount(event.getId());
+            dto.setCurrentParticipants(actualCount);
+            return dto;
+        }).toList();
     }
 
 
@@ -297,5 +330,29 @@ public class EventServiceImpl implements EventService {
                 .stream()
                 .map(Event::getTitle)
                 .toList();
+    }
+
+    @Override
+    @Transactional
+    public void syncEventParticipantCount(Long eventId) {
+        log.info("Syncing participant count for event: {}", eventId);
+        
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
+        
+        // Count APPROVED + PENDING registrations (those who occupy slots)
+        int approvedCount = registrationRepository.countByEventIdAndStatus(eventId, Registration.RegistrationStatus.APPROVED);
+        int pendingCount = registrationRepository.countByEventIdAndStatus(eventId, Registration.RegistrationStatus.PENDING);
+        int actualCount = approvedCount + pendingCount;
+        
+        log.info("Event {}: Current count in DB = {}, Actual count (APPROVED+PENDING) = {}", 
+                 eventId, event.getCurrentRegistrationCount(), actualCount);
+        
+        if (event.getCurrentRegistrationCount() != actualCount) {
+            event.setCurrentRegistrationCount(actualCount);
+            eventRepository.save(event);
+            log.info("Synced event {} participant count from {} to {}", 
+                     eventId, event.getCurrentRegistrationCount(), actualCount);
+        }
     }
 }

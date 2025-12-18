@@ -87,7 +87,14 @@ public class VolunteerDashboardServiceImpl implements VolunteerDashboardService 
 
         return eventService.recommendEvent()
                 .stream()
-                .map(eventMapper::toRecommendEventDTO)
+                .map(event -> {
+                    RecommendEventDTO dto = eventMapper.toRecommendEventDTO(event);
+                    // Calculate real-time count from registrations
+                    int approvedCount = registrationRepository.countByEventIdAndStatus(event.getId(), Registration.RegistrationStatus.APPROVED);
+                    int pendingCount = registrationRepository.countByEventIdAndStatus(event.getId(), Registration.RegistrationStatus.PENDING);
+                    dto.setCurrentParticipants(approvedCount + pendingCount);
+                    return dto;
+                })
                 .toList();
     }
 
@@ -107,7 +114,14 @@ public class VolunteerDashboardServiceImpl implements VolunteerDashboardService 
         return eventRepository
                 .findEventsByVolunteerAndStatus(user.getId(), Event.EventStatus.ONGOING)
                 .stream()
-                .map(eventMapper::toRegisteredEventDTO)
+                .map(event -> {
+                    RegisteredEventDTO dto = eventMapper.toRegisteredEventDTO(event);
+                    // Calculate real-time count from registrations
+                    int approvedCount = registrationRepository.countByEventIdAndStatus(event.getId(), Registration.RegistrationStatus.APPROVED);
+                    int pendingCount = registrationRepository.countByEventIdAndStatus(event.getId(), Registration.RegistrationStatus.PENDING);
+                    dto.setCurrentParticipants(approvedCount + pendingCount);
+                    return dto;
+                })
                 .toList();
     }
 
@@ -118,7 +132,14 @@ public class VolunteerDashboardServiceImpl implements VolunteerDashboardService 
         LocalDateTime sevenDaysLater = LocalDateTime.now().plusDays(7);
         return eventRepository.findUpcomingEvents(now, sevenDaysLater, userId)
                 .stream()
-                .map(eventMapper::toUpComingEventDTO)
+                .map(event -> {
+                    UpcomingEventDTO dto = eventMapper.toUpComingEventDTO(event);
+                    // Calculate real-time count from registrations
+                    int approvedCount = registrationRepository.countByEventIdAndStatus(event.getId(), Registration.RegistrationStatus.APPROVED);
+                    int pendingCount = registrationRepository.countByEventIdAndStatus(event.getId(), Registration.RegistrationStatus.PENDING);
+                    dto.setCurrentParticipants(approvedCount + pendingCount);
+                    return dto;
+                })
                 .toList();
     }
 

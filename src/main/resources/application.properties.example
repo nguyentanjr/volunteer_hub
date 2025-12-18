@@ -1,0 +1,19 @@
+spring.application.name=demo
+
+# MySQL Database Configuration
+spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
+spring.datasource.url=jdbc:mysql://localhost:3306/volunteerdb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Ho_Chi_Minh&characterEncoding=utf8
+spring.datasource.username=your_username
+spring.datasource.password=your_password
+
+# HikariCP Configuration
+spring.datasource.hikari.pool-name=MySQLHikari
+spring.datasource.hikari.maximum-pool-size=10
+spring.datasource.hikari.minimum-idle=2
+spring.datasource.hikari.idle-timeout=10000
+spring.datasource.hikari.max-lifetime=300000
+spring.datasource.hikari.connection-timeout=5000
+
+# Hibernate Configuration
+spring.jpa.hibernate.ddl-auto=none
+

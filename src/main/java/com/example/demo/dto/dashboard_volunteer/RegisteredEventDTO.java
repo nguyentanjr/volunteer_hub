@@ -20,6 +20,7 @@ public class RegisteredEventDTO {
     private String location;
     private Event.EventStatus status;
     private Integer maxParticipants;
+    private Integer currentParticipants;
     private LocalDateTime createdAt = LocalDateTime.now();
     // Changed from User entity to simple fields
     private Long creatorId;

@@ -17,7 +17,6 @@ public interface EventMapper {
     @Mapping(target = "posts", ignore = true)
     @Mapping(target = "tags", ignore = true)
     @Mapping(target = "registrations", ignore = true)
-    @Mapping(target = "currentRegistrationCount", ignore = true)
     @Mapping(target = "rejectReason", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
@@ -40,7 +39,7 @@ public interface EventMapper {
 
     @Mapping(target = "eventId", source = "event.id")
     @Mapping(target = "creatorUsername", source = "event.creator.username")
-    @Mapping(target = "creatorId", source = "event.creator.id")
+    @Mapping(target = "currentParticipants", source = "event.currentRegistrationCount")
     EventDTO toEventDTO(Event event);
 
     EventApprovedDTO toEventApprovedDTO(Event event);

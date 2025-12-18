@@ -67,9 +67,14 @@ public interface RegistrationRepository extends JpaRepository<Registration, Long
            "WHERE r.event.id = :eventId AND r.status = 'PENDING'")
     Integer countPendingByEventId(@Param("eventId") Long eventId);
 
+    // Find all registrations for a specific event with a given status (no pagination)
+    List<Registration> findByEventIdAndStatus(Long eventId, Registration.RegistrationStatus status);
+
     @Query("SELECT r FROM Registration r WHERE r.user.id = :userId AND r.status = :registrationStatus")
     List<Registration> findRecentRegistrations(@Param("userId") Long userId, Registration.RegistrationStatus registrationStatus,
                                                         Pageable pageable);
+    
+    Page<Registration> findByUserId(Long userId, Pageable pageable);
     
     // Admin Dashboard queries
     @Query("SELECT COUNT(r) FROM Registration r WHERE r.status = :status")
@@ -80,32 +85,5 @@ public interface RegistrationRepository extends JpaRepository<Registration, Long
     
     @Query("SELECT r FROM Registration r ORDER BY r.registeredAt DESC")
     List<Registration> findRecentRegistrations(Pageable pageable);
-
-    @Query("SELECT r FROM Registration r WHERE r.event.id = :eventId AND r.status = :status")
-    Page<Registration> findByEventIdAndStatus(@Param("eventId") Long eventId, 
-                                               @Param("status") Registration.RegistrationStatus status,
-                                               Pageable pageable);
-
-    @Query("SELECT r FROM Registration r WHERE r.event.id = :eventId AND r.status = :status")
-    List<Registration> findByEventIdAndStatusList(@Param("eventId") Long eventId, 
-                                                   @Param("status") Registration.RegistrationStatus status);
-
-    @Query("SELECT r FROM Registration r WHERE r.event.id = :eventId")
-    Page<Registration> findByEventId(@Param("eventId") Long eventId, Pageable pageable);
-
-    @Query("SELECT r FROM Registration r WHERE r.user.id = :userId")
-    Page<Registration> findByUserId(@Param("userId") Long userId, Pageable pageable);
-
-    @Query("SELECT r FROM Registration r WHERE r.user.id = :userId AND r.status = :status")
-    Page<Registration> findByUserIdAndStatus(@Param("userId") Long userId, 
-                                             @Param("status") Registration.RegistrationStatus status,
-                                             Pageable pageable);
-
-    @Query("SELECT r FROM Registration r WHERE r.event.id = :eventId " +
-           "AND (:status IS NULL OR r.status = :status) " +
-           "AND (:completedOnly IS NULL OR :completedOnly = false OR r.eventCompleted = true)")
-    List<Registration> findRegistrationsForExport(@Param("eventId") Long eventId,
-                                                    @Param("status") Registration.RegistrationStatus status,
-                                                    @Param("completedOnly") Boolean completedOnly);
 
 }

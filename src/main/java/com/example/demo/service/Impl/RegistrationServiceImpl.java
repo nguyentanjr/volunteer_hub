@@ -20,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
+import org.springframework.cache.CacheManager;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -43,10 +44,14 @@ public class RegistrationServiceImpl implements RegistrationService {
     private final EventRepository eventRepository;
     private final FirebaseService firebaseService;
     private final UserFcmTokenRepository userFcmTokenRepository;
+    
+    @Autowired(required = false)
+    private CacheManager cacheManager;
 
 
     @Caching(evict = {
             @CacheEvict(value = "dashboard", allEntries = true),
+            @CacheEvict(value = "eventsDetails", key = "#eventId"),
     })
     @Transactional
     public RegistrationDTO registerEvent(Long eventId) {
@@ -65,17 +70,27 @@ public class RegistrationServiceImpl implements RegistrationService {
             throw new IllegalStateException("Event is not open for registration.");
         }
 
+        // Count current participants (APPROVED + PENDING = those who occupy slots)
         long approvedCount = countParticipantsOfAnEvent(eventId, Registration.RegistrationStatus.APPROVED);
+        long pendingCount = countParticipantsOfAnEvent(eventId, Registration.RegistrationStatus.PENDING);
+        long currentOccupiedSlots = approvedCount + pendingCount;
 
         Registration registration = new Registration()
                 .setEvent(event)
                 .setUser(user);
 
-        if (approvedCount < event.getMaxParticipants()) {
+        // Check if there's room for this registration
+        if (currentOccupiedSlots < event.getMaxParticipants()) {
+            // There's still room - create PENDING registration
             registration.setStatus(Registration.RegistrationStatus.PENDING);
             event.setCurrentRegistrationCount(event.getCurrentRegistrationCount() + 1);
+            log.info("User {} registered for event {} with PENDING status (slots: {}/{})", 
+                     user.getId(), eventId, currentOccupiedSlots + 1, event.getMaxParticipants());
         } else {
+            // Event is full - add to waiting list
             registration.setStatus(Registration.RegistrationStatus.WAITING);
+            log.info("User {} added to WAITING list for event {} (event is full: {}/{})", 
+                     user.getId(), eventId, currentOccupiedSlots, event.getMaxParticipants());
         }
 
         registrationRepository.save(registration);
@@ -95,7 +110,21 @@ public class RegistrationServiceImpl implements RegistrationService {
         log.info("Get registered events");
         User user = userService.getCurrentUser();
         return registrationRepository.findEventRegistered(user.getId(), pageable)
-                .map(eventMapper::toEventDTO);
+                .map(event -> {
+                    EventDTO dto = eventMapper.toEventDTO(event);
+                    // Calculate real-time count from registrations
+                    int approvedCount = registrationRepository.countByEventIdAndStatus(event.getId(), Registration.RegistrationStatus.APPROVED);
+                    int pendingCount = registrationRepository.countByEventIdAndStatus(event.getId(), Registration.RegistrationStatus.PENDING);
+                    dto.setCurrentParticipants(approvedCount + pendingCount);
+                    return dto;
+                });
+    }
+
+    @Override
+    public Page<RegistrationDTO> getMyRegistrations(Long userId, Pageable pageable) {
+        log.info("Get registrations for user: {}", userId);
+        Page<Registration> registrations = registrationRepository.findByUserId(userId, pageable);
+        return registrations.map(registrationMapper::toRegistrationDTO);
     }
 
     @CacheEvict(value = "dashboard", key = "'manager:' + @userService.getCurrentUser().id")
@@ -115,6 +144,9 @@ public class RegistrationServiceImpl implements RegistrationService {
 
         registration.setStatus(Registration.RegistrationStatus.APPROVED);
         registrationRepository.save(registration);
+        
+        // Evict event details cache to refresh participant count
+        evictEventDetailsCache(event.getId());
     }
 
     @CacheEvict(value = "dashboard", key = "'manager:' + @userService.getCurrentUser().id")
@@ -134,6 +166,9 @@ public class RegistrationServiceImpl implements RegistrationService {
 
         registration.setStatus(Registration.RegistrationStatus.REJECTED);
         registrationRepository.save(registration);
+        
+        // Evict event details cache to refresh participant count
+        evictEventDetailsCache(event.getId());
     }
 
     @Transactional
@@ -142,6 +177,9 @@ public class RegistrationServiceImpl implements RegistrationService {
         log.info("Cancel registration for event: {} (clearing dashboard cache)", eventId);
         Event event = eventRepository.getEventById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
+        
+        // Evict event details cache to refresh participant count
+        evictEventDetailsCache(eventId);
 
         if(event.getDate().isBefore(LocalDateTime.now())) {
             throw new IllegalStateException("You cannot cancel the registration because it's is happening");
@@ -155,42 +193,57 @@ public class RegistrationServiceImpl implements RegistrationService {
         Registration registration = registrationRepository.findRegistrationByUserIdAndEventId(user.getId(), eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Registration not found"));
 
+        // Only process if registration was APPROVED or PENDING (counted)
+        boolean wasCountedRegistration = registration.getStatus() == Registration.RegistrationStatus.APPROVED 
+                                      || registration.getStatus() == Registration.RegistrationStatus.PENDING;
+
         registration.setStatus(Registration.RegistrationStatus.CANCELLED);
         registrationRepository.save(registration);
 
-        event.setCurrentRegistrationCount(event.getCurrentRegistrationCount() - 1);
-        eventRepository.save(event);
+        if (wasCountedRegistration && event.getCurrentRegistrationCount() > 0) {
+            event.setCurrentRegistrationCount(event.getCurrentRegistrationCount() - 1);
+            eventRepository.save(event);
+        }
 
         notificationService.notifyManagerOnUserRegistrationCancelled(registration.getId());
         log.info("User {} cancelled registration for event {}", user.getId(), eventId);
 
-        waitingRegistrationRegister(eventId);
-        event.setCurrentRegistrationCount(event.getCurrentRegistrationCount() + 1);
-
+        // Try to promote someone from waiting list
+        if (wasCountedRegistration) {
+            boolean promoted = promoteWaitingRegistration(eventId);
+            if (promoted) {
+                // Someone was promoted from WAITING to PENDING, increase count back
+                event.setCurrentRegistrationCount(event.getCurrentRegistrationCount() + 1);
+                eventRepository.save(event);
+                log.info("Promoted a waiting registration to pending for event {}", eventId);
+            }
+        }
     }
 
     @Override
-    public void waitingRegistrationRegister(Long eventId) {
-        Registration waitingRegistration = registrationRepository.findEarliestWaitingRegistration(eventId)
-                .stream()
-                .findFirst()
-                .orElseThrow(() -> new ResourceNotFoundException("No waiting registration found"));
+    public boolean promoteWaitingRegistration(Long eventId) {
+        List<Registration> waitingRegistrations = registrationRepository.findEarliestWaitingRegistration(eventId);
+        
+        if (waitingRegistrations.isEmpty()) {
+            log.info("No waiting registrations found for event {}", eventId);
+            return false;
+        }
+        
+        Registration waitingRegistration = waitingRegistrations.get(0);
         waitingRegistration.setStatus(Registration.RegistrationStatus.PENDING);
         registrationRepository.save(waitingRegistration);
+        
+        // Evict event details cache to refresh participant count
+        evictEventDetailsCache(eventId);
+        
+        log.info("Promoted waiting registration {} to PENDING for event {}", waitingRegistration.getId(), eventId);
+        return true;
     }
 
     public RegistrationDTO findRegistrationByUserIdAndEventId(Long userId, Long eventId) {
         Registration registration = registrationRepository.findRegistrationByUserIdAndEventId(userId, eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Registration not found by userId and eventId"));
         return registrationMapper.toRegistrationDTO(registration);
-    }
-
-    @Override
-    public RegistrationDTO getCurrentUserRegistrationStatus(Long eventId) {
-        User user = userService.getCurrentUser();
-        return registrationRepository.findRegistrationByUserIdAndEventId(user.getId(), eventId)
-                .map(registrationMapper::toRegistrationDTO)
-                .orElse(null);
     }
 
     public RegistrationDTO findRegistrationById(Long registrationId) {
@@ -212,7 +265,63 @@ public class RegistrationServiceImpl implements RegistrationService {
         return registrationRepository.countByEventIdAndStatus(eventId, registrationStatus);
     }
 
+    @Override
+    @Transactional
+    @CacheEvict(value = "dashboard", allEntries = true)
+    public void deleteRegistrationById(Long registrationId) {
+        log.info("Deleting registration with ID: {} (clearing dashboard cache)", registrationId);
+        
+        Registration registration = registrationRepository.findRegistrationById(registrationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Registration not found"));
+        
+        Event event = registration.getEvent();
+        
+        // Evict event details cache to refresh participant count
+        evictEventDetailsCache(event.getId());
+        
+        // Only process if not already cancelled
+        if (registration.getStatus() == Registration.RegistrationStatus.CANCELLED) {
+            log.info("Registration {} is already cancelled", registrationId);
+            return;
+        }
+        
+        // Check if this registration was counted (APPROVED or PENDING)
+        boolean wasCountedRegistration = registration.getStatus() == Registration.RegistrationStatus.APPROVED 
+                                      || registration.getStatus() == Registration.RegistrationStatus.PENDING;
+        
+        registration.setStatus(Registration.RegistrationStatus.CANCELLED);
+        registrationRepository.save(registration);
+        
+        // Update event participant count and try to promote waiting registration
+        if (wasCountedRegistration && event.getCurrentRegistrationCount() > 0) {
+            event.setCurrentRegistrationCount(event.getCurrentRegistrationCount() - 1);
+            eventRepository.save(event);
+            
+            // Try to promote someone from waiting list
+            boolean promoted = promoteWaitingRegistration(event.getId());
+            if (promoted) {
+                // Someone was promoted from WAITING to PENDING, increase count back
+                event.setCurrentRegistrationCount(event.getCurrentRegistrationCount() + 1);
+                eventRepository.save(event);
+                log.info("Promoted a waiting registration after deletion for event {}", event.getId());
+            }
+        }
+        
+        log.info("Registration {} deleted successfully", registrationId);
+    }
 
-
+    /**
+     * Helper method to evict event details cache
+     * This ensures participant count is refreshed when registrations change
+     */
+    private void evictEventDetailsCache(Long eventId) {
+        if (cacheManager != null) {
+            var cache = cacheManager.getCache("eventsDetails");
+            if (cache != null) {
+                cache.evict(eventId);
+                log.debug("Evicted event details cache for eventId: {}", eventId);
+            }
+        }
+    }
 
 }

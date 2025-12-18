@@ -63,11 +63,10 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/auth/**").permitAll()
-                        .requestMatchers("/api/v1/tags").permitAll() // Tags are public data
+                        .requestMatchers("/ws/**").permitAll() // allow WebSocket/SockJS handshake without HTTP auth
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/dashboard/manager/**").hasRole("EVENT_MANAGER")
                         .requestMatchers("/actuator/**").permitAll()
-                        .requestMatchers("/ws/**").permitAll() // Allow WebSocket endpoint
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session

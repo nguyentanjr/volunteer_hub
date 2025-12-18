@@ -85,4 +85,14 @@ public class EventController {
         }
         return ResponseEntity.ok(eventService.searchSuggestions(keyword));
     }
+
+    /**
+     * Sync participant count for an event (recalculate from actual registrations)
+     * Useful when count gets out of sync
+     */
+    @PostMapping("/{eventId}/sync-count")
+    public ResponseEntity<ApiResponse<Void>> syncParticipantCount(@PathVariable Long eventId) {
+        eventService.syncEventParticipantCount(eventId);
+        return ResponseEntity.ok(ApiResponse.success(null, "Participant count synced successfully"));
+    }
 }

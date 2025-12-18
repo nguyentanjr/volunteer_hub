@@ -34,15 +34,5 @@ public interface ExportService {
      * Export users with filters to CSV
      */
     byte[] exportUsersToCSV(String role, Boolean enabled) throws IOException;
-    
-    /**
-     * Export registrations for a specific event to CSV
-     */
-    byte[] exportRegistrationsToCSV(Long eventId, String status, Boolean completedOnly) throws IOException;
-    
-    /**
-     * Export registrations for a specific event to JSON
-     */
-    byte[] exportRegistrationsToJSON(Long eventId, String status, Boolean completedOnly) throws IOException;
 }
 

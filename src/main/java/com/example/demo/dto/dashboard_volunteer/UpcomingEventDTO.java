@@ -19,6 +19,7 @@ UpcomingEventDTO {
     private LocalDateTime eventDate;
     private Integer daysUntilEvent;
     private Integer maxParticipants;
+    private Integer currentParticipants;
     private String location;
     private Event.EventStatus status;
 }

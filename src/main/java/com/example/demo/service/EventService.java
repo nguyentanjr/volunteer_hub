@@ -35,4 +35,6 @@ public interface EventService {
     List<Event> recommendEvent();
 
     List<String> searchSuggestions(String eventTitle);
+
+    void syncEventParticipantCount(Long eventId);
 }

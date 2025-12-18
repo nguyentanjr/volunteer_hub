@@ -20,6 +20,8 @@ public interface RegistrationService {
 
     Page<EventDTO> getRegisteredEvents(Pageable pageable);
 
+    Page<RegistrationDTO> getMyRegistrations(Long userId, Pageable pageable);
+
     void approvedRegistration(Long registrationId) throws FirebaseMessagingException;
 
     void rejectedRegistration(Long registrationId) throws FirebaseMessagingException;
@@ -32,12 +34,7 @@ public interface RegistrationService {
 
     User getEventCreatorFromRegistration(Long registrationId);
 
-    void waitingRegistrationRegister(Long eventId);
+    boolean promoteWaitingRegistration(Long eventId);
 
-    /**
-     * Get current user's registration status for a specific event
-     * @param eventId Event ID
-     * @return RegistrationDTO if user is registered, null otherwise
-     */
-    RegistrationDTO getCurrentUserRegistrationStatus(Long eventId);
+    void deleteRegistrationById(Long registrationId);
 }

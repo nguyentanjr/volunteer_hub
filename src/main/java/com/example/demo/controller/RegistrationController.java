@@ -4,34 +4,25 @@ import com.cloudinary.Api;
 import com.example.demo.dto.common.ApiResponse;
 import com.example.demo.dto.event.EventDTO;
 import com.example.demo.dto.registration.RegistrationDTO;
-import com.example.demo.service.ExportService;
 import com.example.demo.service.RegistrationService;
+import com.example.demo.service.UserService;
 import com.google.firebase.messaging.FirebaseMessagingException;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import java.io.IOException;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 
 @RestController
 @RequestMapping("/api/v1/registrations")
 @RequiredArgsConstructor
-@Slf4j
 public class RegistrationController {
 
     private final RegistrationService registrationService;
-    private final ExportService exportService;
+    private final UserService userService;
 
     @PostMapping("/events/{eventId}")
     public ResponseEntity<ApiResponse<RegistrationDTO>> registerEvent(@PathVariable Long eventId) {
@@ -55,7 +46,7 @@ public class RegistrationController {
     public ResponseEntity<ApiResponse<Page<RegistrationDTO>>> getAllRegistrationOfAnEvent(
             @PathVariable Long eventId,
             @RequestParam(defaultValue = "0") int pageNumber,
-            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(defaultValue = "1 0") int pageSize,
             @RequestParam(defaultValue = "id") String sortBy,
             @RequestParam(defaultValue = "asc") String sortDir) {
         Sort sort = sortDir.equalsIgnoreCase("asc")
@@ -84,50 +75,47 @@ public class RegistrationController {
         return ResponseEntity.ok(ApiResponse.success(registrationService.getRegisteredEvents(pageable)));
     }
 
-    @GetMapping("/events/{eventId}/status")
-    public ResponseEntity<ApiResponse<RegistrationDTO>> getRegistrationStatus(@PathVariable Long eventId) {
-        RegistrationDTO registrationDTO = registrationService.getCurrentUserRegistrationStatus(eventId);
-        if (registrationDTO == null) {
-            return ResponseEntity.ok(ApiResponse.success(null, "User has not registered for this event"));
-        }
-        return ResponseEntity.ok(ApiResponse.success(registrationDTO));
+    /**
+     * Get current user's registrations with full details (including status)
+     * Used by frontend to show registration status badges
+     */
+    @GetMapping("/my-registrations")
+    public ResponseEntity<ApiResponse<Page<RegistrationDTO>>> getMyRegistrations(
+            @RequestParam(defaultValue = "0") int pageNumber,
+            @RequestParam(defaultValue = "100") int pageSize) {
+        Long currentUserId = userService.getCurrentUser().getId();
+        Sort sort = Sort.by("registeredAt").descending();
+        Pageable pageable = PageRequest.of(pageNumber, pageSize, sort);
+        
+        Page<RegistrationDTO> registrations = registrationService.getMyRegistrations(currentUserId, pageable);
+        return ResponseEntity.ok(ApiResponse.success(registrations));
     }
 
-    @GetMapping("/events/{eventId}/export")
-    @PreAuthorize("hasRole('EVENT_MANAGER') or hasRole('ADMIN')")
-    public ResponseEntity<byte[]> exportEventRegistrations(
-            @PathVariable Long eventId,
-            @RequestParam(defaultValue = "csv") String format,
-            @RequestParam(required = false) String status,
-            @RequestParam(required = false) Boolean completedOnly) throws IOException {
-        
-        log.info("Exporting registrations for event {} - format: {}, status: {}, completedOnly: {}", 
-                eventId, format, status, completedOnly);
-        
-        byte[] data;
-        String filename;
-        MediaType mediaType;
-        
-        if ("json".equalsIgnoreCase(format)) {
-            data = exportService.exportRegistrationsToJSON(eventId, status, completedOnly);
-            filename = "registrations_event_" + eventId + "_" + 
-                      LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".json";
-            mediaType = MediaType.APPLICATION_JSON;
-        } else {
-            data = exportService.exportRegistrationsToCSV(eventId, status, completedOnly);
-            filename = "registrations_event_" + eventId + "_" + 
-                      LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".csv";
-            mediaType = MediaType.parseMediaType("text/csv");
+    /**
+     * Get registration status for current user in a specific event.
+     * Used by frontend to decide whether to show Register button or not.
+     */
+    @GetMapping("/events/{eventId}/status")
+    public ResponseEntity<ApiResponse<RegistrationDTO>> getMyRegistrationStatus(@PathVariable Long eventId) {
+        // Get current authenticated user
+        Long currentUserId = userService.getCurrentUser().getId();
+
+        try {
+            RegistrationDTO registrationDTO = registrationService.findRegistrationByUserIdAndEventId(currentUserId, eventId);
+            return ResponseEntity.ok(ApiResponse.success(registrationDTO));
+        } catch (Exception ex) {
+            // If no registration found, return success with null data so frontend knows user is not registered
+            return ResponseEntity.ok(ApiResponse.success(null, "No registration found for current user and event"));
         }
-        
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(mediaType);
-        headers.setContentDispositionFormData("attachment", filename);
-        headers.setCacheControl("must-revalidate, post-check=0, pre-check=0");
-        
-        return ResponseEntity.ok()
-                .headers(headers)
-                .body(data);
+    }
+
+    /**
+     * Delete/remove a registration by manager (admin can remove any user from event)
+     */
+    @DeleteMapping("/{registrationId}")
+    public ResponseEntity<ApiResponse<Void>> deleteRegistration(@PathVariable Long registrationId) {
+        registrationService.deleteRegistrationById(registrationId);
+        return ResponseEntity.ok(ApiResponse.success(null, "Registration deleted successfully"));
     }
 
 }

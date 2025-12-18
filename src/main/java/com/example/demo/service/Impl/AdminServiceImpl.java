@@ -23,7 +23,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -57,12 +56,9 @@ public class AdminServiceImpl implements AdminService {
     private final RoleRepository roleRepository;
 
 
-    @Caching(evict = {
-            @CacheEvict(value = "dashboard", allEntries = true),
-            @CacheEvict(value = "eventsDetails", key = "#eventId")
-    })
+    @CacheEvict(value = "dashboard", allEntries = true)
     public Event approveEvent(Long eventId) throws FirebaseMessagingException {
-        log.info("Approve event with ID: {} (clearing dashboard and event details cache)", eventId);
+        log.info("Approve event with ID: {} (clearing dashboard cache)", eventId);
 
         Event event = eventRepository.getEventById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
@@ -74,12 +70,9 @@ public class AdminServiceImpl implements AdminService {
         return eventRepository.save(event);
     }
 
-    @Caching(evict = {
-            @CacheEvict(value = "dashboard", allEntries = true),
-            @CacheEvict(value = "eventsDetails", key = "#eventId")
-    })
+    @CacheEvict(value = "dashboard", allEntries = true)
     public Event rejectEvent(Long eventId, String reason) throws FirebaseMessagingException {
-        log.info("Reject event with ID: {} (clearing dashboard and event details cache)", eventId);
+        log.info("Reject event with ID: {} (clearing dashboard cache)", eventId);
         Event event = eventRepository.getEventById(eventId)
 
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
